@@ -1,0 +1,104 @@
+(version 1.0)
+Overview
+This folder contains all tabular data used in the multi-species occupancy modeling (MSOM) and subsequent trait-based analyses presented in this study.
+Datasets are organized conceptually into:
+1.	Primary MSOM inputs (camera operation, detections, site covariates, observation covariates), and
+2.	Species trait data used in post-hoc analyses of species-level responses.
+All files are provided as comma-separated values (.csv) and are intended to be read directly into R.
+________________________________________
+Data Access & Licensing
+•	Data in this folder are released under CC0 1.0, unless otherwise noted.
+•	These files represent the analysis-ready datasets used to generate all reported results.
+•	Please reach out if you wish to use to work for any non-review purposes.
+________________________________________
+File Inventory & Roles
+1. Primary MSOM Input Data
+HondurasData_LimitedComSpecies_V3_CAMOP6_250m.csv
+Type: Camera operation table
+Used in: MSOM data assembly and detection history construction
+Description:
+Camera station operation metadata including name, location, deployment and retrieval dates for each camera station. This table defines survey effort and temporal availability of cameras and is used to construct detection histories.
+Key fields include:
+•	Station (Camera Station ID)
+•	Setup_date (Date station was deployed)
+•	Retrieval_date/Function Date (Date camera was active to)
+•	Latitude
+•	Longitude
+Role in analysis:
+Defines the structure of sampling and underlies all detection history calculations. Used in primary MSOM code for camtrapR model creation/coding.
+________________________________________
+HondurasData_250mCams_FinalMSOM_V4_RecordTable26.csv
+Type: Detection record table
+Used in: MSOM detection history construction
+Description:
+Species-level detection records derived from camera trap imagery. Each row represents a detection event, including species identity and timestamp. Note record table limited to 30 species community under analysis (Done to automate the process of detection matrix creation in camtrapR for MSOMs). Full non-limited recordtable is available on request but was not part of the direct analysis after initial filtering of species records. 
+Key fields include:
+•	camera station ID
+•	species name
+•	detection datetime
+Role in analysis:
+Primary biological observation dataset used to generate species-specific detection histories for the MSOM.
+________________________________________
+Honduras_Covariates_1km_250mCams_V22.csv
+Type: Site-level covariate table
+Used in: MSOM occupancy and detection sub-models
+Description:
+Site-level environmental and anthropogenic covariates extracted or summarized at the camera station scale. Continuous covariates are standardized prior to modeling, and categorical variables are treated as factors.
+Key fields:
+•	Station
+•	Setup_date
+•	Retrieval_date
+•	Latitude
+•	Longitude
+•	Patch ID 
+•	Raw_Parea_d80_km
+•	PatchSize (Categorical size class used to verify spatial projections in posthoc)
+•	C_Function (Categorical Detection Covariate)
+•	Duration (Scaled Continuous Detection Covariate)
+•	Human_Ratio (Scaled Continuous Detection Covariate)
+•	AgAnimal_Ratio (Scaled Continuous Detection Covariate)
+•	D_2_PA (Scaled Continuous Occupancy Covariate)
+•	HMI (Scaled Continuous Occupancy Covariate)
+•	VNL_2 (Scaled Continuous Occupancy Covariate)
+•	P_Area_log (Scaled Continuous Occupancy Covariate)
+•	D_2_Core (Scaled Continuous Occupancy Covariate)
+•	Canopy (Scaled Continuous Occupancy Covariate)
+•	Elev (Scaled Continuous Occupancy Covariate)
+•	NPP (Scaled Continuous Occupancy Covariate)
+•	Precip (Scaled Continuous Occupancy Covariate)
+Role in analysis:
+Predictor parameters for species-specific occupancy and detection probability within the MSOM framework.
+________________________________________
+Seasonalitymatrix_250m.csv
+Type: Observation-level covariate matrix
+Used in: MSOM detection submodel
+Description:
+Matrix encoding temporal variation in detection probability (seasonality) at the observation level/10 day occasion level. Rows correspond to camera stations and columns to sampling occasions.
+Role in analysis:
+Incorporated as an observation-level random effect on detection probability to account for seasonal variation in detectability. Value represent the numbers of days past the start of the Dry season for the region.________________________________________
+2. Species Trait Data (Post-Hoc Analyses)
+SppTraitCats_Testing_5.csv
+Type: Species trait table
+Used in: Trait-based post-hoc analyses of MSOM results
+Description:
+Categorical ecological and conservation traits assigned to each modeled species. Traits are used to group species and evaluate heterogeneity in species-level responses to environmental covariates. Full details in Appendix S1 Table S1.
+Key fields:
+•	NAT_IUCN
+•	Bodymass_Cat
+•	T_Cat 
+•	FG
+•	Hunting_V
+•	Habitat_specificity
+Role in analysis:
+Supports trait-based interpretation of species-specific MSOM coefficients and posterior distributions.
+________________________________________
+Reproducibility Notes
+•	All datasets are provided in the final, analysis-ready form used for modeling.
+•	Raw data processing steps (e.g., image classification, covariate extraction) are documented elsewhere or available upon request.
+•	Column names are consistent across scripts and datasets to enable direct reuse.
+________________________________________
+Citation
+If you use these data, please cite:
+•	the associated manuscript, and
+•	the archived repository DOI (see main repository README.md).
+________________________________________
