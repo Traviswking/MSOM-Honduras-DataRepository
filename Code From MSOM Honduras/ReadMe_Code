@@ -1,0 +1,93 @@
+(Version 1.0)
+Overview
+This folder contains all R scripts and model specification files used to fit, evaluate, and visualize the Royle–Nichols multi-species occupancy models (MSOMs) and associated spatial projections and trait-based analyses for this study.
+The code is organized to reflect the logical workflow of the analysis, from data assembly and model fitting to post-processing, visualization, and spatial prediction.
+All scripts were developed and executed in R, using camtrapR and rjags for Bayesian model fitting.
+________________________________________
+Software & Dependencies
+•	R version: (to be filled; e.g., R ≥ 4.x)
+•	Key packages:
+camtrapR, rjags, coda, terra, ggplot2, tidyverse, DT, sf, bayestestR, ggridges
+________________________________________
+File Inventory & Roles
+1. Core Model Construction & Execution
+MSOM_Honduras_18_2_fullrun_Rcode.txt
+Purpose:
+End-to-end R script that:
+•	assembles detection histories and covariates,
+•	constructs the Royle–Nichols MSOM using camtrapR,
+•	executes the full JAGS model run,
+•	saves posterior samples and diagnostic outputs,
+•	generates initial coefficient plots and summary tables.
+Notes:
+This script defines the primary statistical model used in the manuscript and represents the authoritative implementation of the MSOM analysis.
+________________________________________
+MSOM_T18_2.R
+Purpose:
+Standalone R script for:
+•	loading the prepared MSOM data object,
+•	running the JAGS model with finalized MCMC settings,
+•	saving posterior samples and diagnostics,
+•	exporting summary statistics and effect plots.
+Notes:
+This script isolates the model fitting and diagnostics phase, facilitating reproducibility and reruns without re-assembling the full data package. Initially used for the Kamiak HPC model run which requires shell script run in bash.
+________________________________________
+MSOM_T18_ModelText_2.txt
+Purpose:
+JAGS model specification file defining:
+•	community-level priors,
+•	species-level random effects,
+•	occupancy and detection submodels,
+•	Bayesian goodness-of-fit diagnostics,
+•	derived quantities (e.g., mean occupancy and detection).
+Notes:
+This file contains the formal statistical model text referenced in the Methods and Supplementary Materials.
+________________________________________
+2. Spatial Prediction & Raster Outputs
+MSOM_Honduras_18_2_Species_Spatial_Projections.txt
+Purpose:
+Generates spatial predictions of:
+•	species-specific occupancy probability
+•	community-level species richness,
+using fitted MSOM outputs and scaled landscape covariate rasters.
+Outputs include:
+•	GeoTIFF layers of mean and uncertainty,
+•	PDF maps for visual inspection.
+Notes:
+This script underlies all spatial projections and maps presented in the manuscript.
+________________________________________
+3. Trait-Based Post-Hoc Analyses & Visualization
+MSOM_Honduras_Graphing_SppTraits_FullAnalysisCode.txt
+Purpose:
+Post-processing of MSOM posterior samples to:
+•	link species-level responses to ecological traits,
+•	generate ridge plots and forest plots,
+•	compute group-level contrasts and posterior overlap,
+•	export summary tables of significant differences.
+Notes:
+This script supports trait-based inference and secondary analyses reported in the Results.
+________________________________________
+Expected Inputs
+Scripts in this folder assume the presence of:
+•	processed detection histories,
+•	site-level covariate tables,
+•	(for spatial projections) pre-aligned raster covariates.
+Input data files are described in the /data directory README and are not duplicated here.
+________________________________________
+Expected Outputs
+Depending on the script executed, outputs may include:
+•	.rds objects containing fitted model results,
+•	.csv summary tables,
+•	.pdf diagnostic and effect plots,
+•	.tif raster layers of predicted occupancy and richness.
+All outputs are either regenerated dynamically or saved to designated output directories documented elsewhere in the repository.
+________________________________________
+Reproducibility Notes
+•	Random seeds should be set explicitly if exact numerical replication is required.
+•	Full model runs are computationally intensive and may require HPC resources.
+•	Note Primary coding pieces are here for core portions of the analysis but if you have any questions or are missing a portion of code for a minor step please contact the primary author happy to help.
+________________________________________
+Citation
+If you use this code, please cite:
+•	the associated manuscript, and
+•	the archived repository DOI (see main repository README.md).
