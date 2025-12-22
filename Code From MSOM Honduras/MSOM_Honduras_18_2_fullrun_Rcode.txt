@@ -1,0 +1,283 @@
+################ Full MSOM model run 18_2
+
+####### Full R-code for the Royle-Nichols multi-species occupancy model (MSOM) used in our study. Code is structured for implementation using camtrapR and JAGS via R.
+
+############## Create Initial Data Package for MSOM:
+
+library(camtrapR)
+library(purrr)
+library(DT)
+library(knitr)
+library(ggplot2)
+library(sf)
+library(rlist)
+library(rjags)
+library(coda)
+library(gridExtra)
+
+
+### call camop, record table, site covs
+##### will need to adjust read location
+
+
+camtraps <- read.csv("HondurasData_LimitedComSpecies_V3_CAMOP6_250m.csv")
+
+recordTable <- read.csv("HondurasData_250mCams_FinalMSOM_V4_RecordTable26.csv")
+
+sitecovs <-  read.csv("Honduras_Covariates_1km_250mCams_V22.csv")
+
+SeasonM <-  read.csv("Seasonalitymatrix_250m.csv")
+
+Seasonality <- data.matrix(SeasonM)
+
+
+
+ camop_no_problem <- cameraOperation(CTtable      = camtraps,
+                                    stationCol   = "Station",
+                                    setupCol     = "Setup_date",
+                                    retrievalCol = "Retrieval_date.Function.Date",
+                                    hasProblems  = FALSE,
+                                    dateFormat   = "%m/%d/%Y"
+)
+
+
+
+
+ DetHist_list <- lapply(unique(recordTable$Species), FUN = function(x) {
+   detectionHistory(
+     recordTable         = recordTable,
+     camOp                = camop_no_problem,
+     stationCol           = "Station",
+     speciesCol           = "Species",
+     recordDateTimeCol    = "DateTimeOriginal",
+     recordDateTimeFormat = "%m/%d/%Y %H:%M",
+     species              = x,     # this gets modifies by lapply
+     occasionLength       = 10,
+     day1                 = "station",
+     maxNumberDays        =  150,
+     datesAsOccasionNames = FALSE,
+     includeEffort        = TRUE,
+     scaleEffort          = FALSE,
+     timeZone             = "UTC"
+   )}
+ )
+
+ # assign species names to the list items
+
+ names(DetHist_list) <- unique(recordTable$Species)
+
+##Get the detection history of each species and put into a new list (thereby removing the effort matrix).
+
+ ylist <- lapply(DetHist_list, FUN = function(x) x$detection_history)
+
+
+
+####### converting characters to Factors in R for any used categorical classes
+
+
+############# figure out what covariates are read as
+
+
+sitecovs$C_Function <- as.factor(sitecovs$C_Function) 
+
+
+
+############# str(sitecovs) #to check naming worked
+
+
+#### Create Data List  bundle the necessary data for communityModel
+
+ data_list <- list(ylist    = ylist,
+                   siteCovs = sitecovs,
+                   obsCovs  = list(effort = DetHist_list[[1]]$effort, Seasonality = Seasonality))
+
+
+
+########## actual model build in temp file
+
+modelfileT18 <- tempfile(fileext = ".txt")
+
+ mod.jagsT18 <- communityModel(model = "RN",
+			    data_list,
+                            occuCovs = list(ranef = c("P_Area_log", "D_2_Core", "Canopy", "D_2_PA", "HMI", "VNL_2", "Elev", "NPP", "Precip")),
+                            detCovs = list(ranef = c("Duration", "Human_Ratio", "C_Function", "AgAnimal_Ratio")),
+                            detCovsObservation = list(ranef = "Seasonality"),
+                            intercepts = list(det = "ranef", occu = "ranef"),
+                            modelFile = modelfileT18)
+
+print(mod.jagsT18, dig = 3)
+list.save(mod.jagsT18, "mod.jagsT18_BPV.rds")
+
+
+################ access the saved text file of model structure here, we edit the code and add model diagnostics
+################ mod.jags file is the S4 object that packages your data structure for an rjags model run
+
+
+
+
+
+
+########## Full JAGS Model Run Script – R-code
+
+########### MSOM_T18_2.R
+
+
+library(camtrapR)
+library(purrr)
+library(DT)
+library(knitr)
+library(ggplot2)
+library(sf)
+library(rlist)
+library(rjags)
+library(coda)
+library(gridExtra)
+
+####### Read MSOM Data Package:
+mod.jagsT18_2 <- readRDS("mod.jagsT18_BPV.rds")
+
+###Read edited model text:
+modelFile = 'MSOM_T18_ModelText_2.txt'
+
+### Add additional parameters to monitor:
+params = c("mu.psi", "mu.p", mod.jagsT18_2@params)
+
+### set model settings:
+n.iter = 60000
+n.burnin = 30000
+thin = 50
+chains = 5
+
+######## Fit JAGS model:
+mod <- rjags::jags.model(file =  modelFile, 
+                               data = mod.jagsT18_2@data, 
+                               inits = mod.jagsT18_2@inits_fun(),
+                               n.chain=chains, 
+                               n.adapt=0,
+                               quiet = TRUE)
+            out <- rjags::coda.samples(model = mod,
+                                variable.names = params, 
+                                n.iter	= n.iter, 
+                                thin = thin)
+
+######## Save MCMC outputs:
+   out_mcmclist <- coda::mcmc.list(out)
+   fit.jagsT18_2 <- window(out_mcmclist, 
+                     start=n.burnin+1, 
+                     end = n.iter)
+print(fit.jagsT18_2, dig = 3)
+list.save(fit.jagsT18_2, "fit.jagsT18_2.rds")
+
+
+print(mod.jagsT18_2, dig = 3)
+list.save(mod.jagsT18_2, "mod.jagsT18_2.rds")
+
+
+
+########## Visuals and Initial Outputs:
+
+
+fit_summary <- summary(fit.jagsT18_2)
+
+
+MSOM_T18_2_Statistics <- DT::datatable(round(fit_summary$statistics, 3))
+
+write.csv(MSOM_T18_2_Statistics$x$data, file = "MSOM_T18_2_Statistics.csv")
+
+
+
+
+
+MSOM_T18_2_Quantiles <-DT::datatable(round(fit_summary$quantiles, 3))
+
+write.csv(MSOM_T18_2_Quantiles$x$data, file = "MSOM_T18_2_Quantiles.csv")
+
+
+MSOM_T18_2_OccEffectPlot <- plot_effects(mod.jagsT18_2,
+                                      fit.jagsT18_2,
+                                      submodel = "state")
+
+ggsave(
+  filename = "MSOM_T18_2_OccEffectPlots.pdf", 
+  plot = marrangeGrob(MSOM_T18_2_OccEffectPlot, nrow=1, ncol=1), 
+  width = 15, height = 9
+)
+
+
+MSOM_T18_2_DetEffectPlot <- plot_effects(mod.jagsT18_2,
+                                      fit.jagsT18_2,
+                                      submodel = "det")
+
+ggsave(
+  filename = "MSOM_T18_2_DetEffectPlots.pdf", 
+  plot = marrangeGrob(MSOM_T18_2_DetEffectPlot, nrow=1, ncol=1), 
+  width = 15, height = 9
+)
+
+
+MSOM_T18_2_OccCoefPlot_Combined <- plot_coef(mod.jagsT18_2,
+                                          fit.jagsT18_2,
+                                          submodel = "state",
+                                          combine = T)
+
+
+ggsave(
+  filename = "MSOM_T18_2_OccCoefPlot_Combined.pdf", 
+  plot = MSOM_T18_2_OccCoefPlot_Combined, 
+  width = 15, height = 9
+)
+
+
+
+MSOM_T18_2_OccCoefPlots <- plot_coef(mod.jagsT18_2,
+                                  fit.jagsT18_2,
+                                  submodel = "state",
+                                  ordered = TRUE)
+
+ggsave(
+  filename = "MSOM_T18_2_OccCoefPlots.pdf", 
+  plot = marrangeGrob(MSOM_T18_2_OccCoefPlots, nrow=1, ncol=1), 
+  width = 15, height = 9
+)
+
+
+MSOM_T18_2_DetCoefPlots <- plot_coef(mod.jagsT18_2,
+                                  fit.jagsT18_2,
+                                  submodel = "det")
+
+ggsave(
+  filename = "MSOM_T18_2_DetCoefPlots.pdf", 
+  plot = marrangeGrob(MSOM_T18_2_DetCoefPlots, nrow=1, ncol=1), 
+  width = 15, height = 9
+)
+
+
+
+gd <- coda::gelman.diag(fit.jagsT18_2,  multivariate = FALSE)
+gd
+
+
+MSOM_T18_2_GelmanD <- DT::datatable(round(gd$psrf, 3))
+
+write.csv(MSOM_T18_2_GelmanD$x$data, file = "MSOM_T18_2_GelmanD.csv")
+
+
+gp <- coda::gelman.plot(fit.jagsT18_2,  multivariate = FALSE)
+gp
+
+
+print(gp, dig = 3)
+list.save(gp, "MSOM_T18_2_gp.rds")
+
+
+mcmc.df <- as.data.frame(as.matrix(fit.jagsT18_2))
+
+write.csv(mcmc.df, file = "FullMCMC_T18_2.csv")
+
+
+
+################### END Rscript
+
+
+
+

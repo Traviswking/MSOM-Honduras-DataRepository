@@ -1,0 +1,639 @@
+##################### work to quickly examine species composion changes driving species richness patterns on landscape scale (patch scale species richness and occpancy projections
+
+setwd("~/2021 Honduras/23_DissertationWriting/CH1 Results Graphics and Tables/9_PatchRichness_by_SppTraits_V2_Updated")
+
+
+################# step one compare summ occupancy to estimated mean richness
+
+library(terra)
+library(dplyr)
+library(ggplot2)
+
+# Load mean species richness raster
+richness_mean <- rast("T18_Richness_Mean.tif")  
+
+# Load species trait data
+traits <- read.csv("SppTraitCats_for_LandscapeAnalysis2.csv")
+
+# List all species occupancy raster files (assuming same directory as CSV)
+species_files <- traits$File_Name
+
+# Stack all species occupancy rasters
+species_rasters <- rast(species_files)
+
+# Ensure all species rasters are aligned with richness raster
+species_rasters <- resample(species_rasters, richness_mean, method="bilinear")
+
+# Sum all species occupancy rasters
+summed_species_occupancy <- app(species_rasters, sum, na.rm=TRUE)
+
+# Save summed occupancy raster
+writeRaster(summed_species_occupancy, "Summed_Species_Occupancy.tif", overwrite=TRUE, filetype="GTiff")
+
+# Compare Summed Occupancy vs. Mean Richness
+occupancy_vs_richness <- summed_species_occupancy - richness_mean
+
+# Save difference raster
+writeRaster(occupancy_vs_richness, "Occupancy_vs_Richness_Difference.tif", overwrite=TRUE, filetype="GTiff")
+
+# Map the differences
+plot(occupancy_vs_richness, main="Difference: Summed Species Occupancy vs. Mean Richness")
+
+
+
+############## Step 2: Compute Mean Occupancy Per Species by Landscape Groups
+
+
+# ---- Load Required Libraries ---- #
+library(terra)
+library(dplyr)
+library(ggplot2)
+
+# ---- Load Mean Species Richness Raster ---- #
+richness_mean <- rast("T18_Richness_Mean.tif")  
+
+# ---- Load Landscape Grouping Rasters ---- #
+protected_status <- rast("PatchProtectedStatus.tif")  # 1 = Protected, 0 = Unprotected
+patch_size <- rast("PatchAreaCategories.tif")  # Categorical patch sizes
+
+# ---- Load Species Trait Data ---- #
+traits <- read.csv("SppTraitCats_for_LandscapeAnalysis2.csv", stringsAsFactors=FALSE)
+
+# ---- Ensure Correct Column Name for Species File Names ---- #
+if (!"File_Name" %in% colnames(traits)) {
+  stop("ERROR: 'File_Name' column not found in CSV. Check column names with colnames(traits).")
+}
+
+# ---- Trim Whitespace from File Names ---- #
+traits$File_Name <- trimws(traits$File_Name)
+
+# ---- Load & Align Species Occupancy Rasters ---- #
+species_files <- traits$File_Name  # List of species raster file names
+species_rasters <- rast(species_files)  # Load all species occupancy rasters
+
+# ---- Ensure All Rasters are Aligned ---- #
+protected_status <- resample(protected_status, species_rasters, method="near")
+patch_size <- resample(patch_size, species_rasters, method="near")
+
+# Crop & Mask to Match Species Rasters
+protected_status <- crop(protected_status, species_rasters) %>% mask(species_rasters)
+patch_size <- crop(patch_size, species_rasters) %>% mask(species_rasters)
+
+# ---- Extract Species Occupancy Data as DataFrame ---- #
+df_species <- as.data.frame(species_rasters, xy=TRUE)
+
+# ---- Extract Landscape Values Properly ---- #
+df_species$protected_status <- extract(protected_status, df_species[, c("x", "y")], method="simple")[,2]
+df_species$patch_size <- extract(patch_size, df_species[, c("x", "y")], method="simple")[,2]
+
+# ---- Ensure Extracted Values Are Present ---- #
+print(head(df_species$protected_status))  # Should show 0s and 1s
+print(head(df_species$patch_size))  # Should show values 1-4
+
+# ---- Remove NA Rows Only from Species Data ---- #
+species_columns <- setdiff(colnames(df_species), c("x", "y", "protected_status", "patch_size"))
+df_species <- df_species[complete.cases(df_species[, species_columns]), ]
+
+# ---- Verify Column Names ---- #
+print(colnames(df_species))
+
+# ---- Save Corrected Data ---- #
+write.csv(df_species, "Corrected_Species_Occupancy_Data.csv", row.names=FALSE)
+print("✅ Successfully saved the corrected data with protected_status and patch_size.")
+
+# ---- Compute Mean Occupancy Per Species by PROTECTED STATUS ---- #
+species_means_protected <- df_species %>%
+  group_by(protected_status) %>%
+  summarise(across(all_of(species_columns), mean, na.rm=TRUE), .groups = "drop")
+
+# ---- Compute Mean Occupancy Per Species by PATCH SIZE ---- #
+species_means_patchsize <- df_species %>%
+  group_by(patch_size) %>%
+  summarise(across(all_of(species_columns), mean, na.rm=TRUE), .groups = "drop")
+
+# ---- Save Results as CSV ---- #
+write.csv(species_means_protected, "Mean_Species_Occupancy_By_Protected.csv", row.names=FALSE)
+write.csv(species_means_patchsize, "Mean_Species_Occupancy_By_PatchSize.csv", row.names=FALSE)
+
+# ---- Print Confirmation Message ---- #
+print("✅ Mean species occupancy successfully saved separately for Protected Status and Patch Size.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########### step 3 
+
+
+library(terra)
+library(dplyr)
+library(ggplot2)
+library(rasterVis)
+library(gridExtra)
+
+# Function to sanitize file names
+sanitize_filename <- function(name) {
+  name <- gsub("[^a-zA-Z0-9_]", "_", name)  # Replace special characters with "_"
+  name <- substr(name, 1, 50)  # Truncate to prevent long names
+  return(name)
+}
+
+# ---- Load Species Trait Data ---- #
+traits <- read.csv("SppTraitCats_for_LandscapeAnalysis2.csv", stringsAsFactors=FALSE)
+
+if (!"File_Name" %in% colnames(traits)) {
+  stop("ERROR: 'File_Name' column not found in CSV. Check column names with colnames(traits).")
+}
+
+traits$File_Name <- trimws(traits$File_Name)
+grouping_vars <- c("NAT_IUCN", "FG", "Habitat_Specificity", "Body_Size", "Hunting_V", "TL_Cat")
+species_files <- traits$File_Name
+species_rasters <- rast(species_files)
+names(species_rasters) <- traits$File_Name
+
+# ---- Open a Multi-Page PDF ---- #
+pdf("Summed_Occupancy_Comparisons.pdf", width=12, height=10)  # Increase width & height for better visualization
+
+# ---- Process Each Species-Level Grouping Variable ---- #
+for (var in grouping_vars) {
+  
+  print(paste("Processing:", var))
+
+  categories <- unique(traits[[var]])
+  category_rasters <- list()
+  plot_list <- list()  # Store plots for grid arrangement
+  global_min <- Inf
+  global_max <- -Inf
+
+  for (cat in categories) {
+    
+    print(paste("Summing occupancy for:", cat))
+    species_in_category <- traits$File_Name[traits[[var]] == cat]
+    valid_species <- species_in_category[species_in_category %in% names(species_rasters)]
+
+    if (length(valid_species) > 0) {
+      rasters_in_category <- species_rasters[[valid_species]]
+      summed_raster <- app(rasters_in_category, sum, na.rm=TRUE)
+      category_rasters[[cat]] <- summed_raster
+      min_val <- min(values(summed_raster), na.rm=TRUE)
+      max_val <- max(values(summed_raster), na.rm=TRUE)
+      global_min <- min(global_min, min_val)
+      global_max <- max(global_max, max_val)
+    } else {
+      print(paste("⚠ Warning: No matching species found for category:", cat))
+    }
+  }
+  
+  # ---- Arrange Multiple Plots on One Page ---- #
+  if (length(category_rasters) > 0) {
+    for (cat in categories) {
+      if (!is.null(category_rasters[[cat]])) {
+        safe_cat <- sanitize_filename(cat)  # Ensure valid file name
+        print(paste("Generating plot for:", var, "-", safe_cat))  
+
+        plot_obj <- levelplot(category_rasters[[cat]], 
+                              main = paste("Summed Occupancy -", var, "-", cat), 
+                              margin = FALSE, 
+                              col.regions = terrain.colors(10),
+                              at = seq(global_min, global_max, length.out=11))
+
+        plot_list[[cat]] <- plot_obj  # Store plot in list
+      }
+    }
+  }
+
+  # ---- Print All Plots for One Species Grouping on a Single Page ---- #
+  if (length(plot_list) > 0) {
+    grid.arrange(grobs = plot_list, ncol=2, nrow=ceiling(length(plot_list)/2),
+                 top = paste("Summed Occupancy for", var))  # 2 columns, dynamic row count
+  }
+}
+
+# ---- Close PDF ---- #
+dev.off()
+print("✅ Completed Summing & Mapping for All Species-Level Grouping Variables.")
+
+
+
+########### step 3.2 variable scale mapping
+
+library(terra)
+library(dplyr)
+library(ggplot2)
+library(rasterVis)
+library(gridExtra)
+
+# Function to sanitize file names
+sanitize_filename <- function(name) {
+  name <- gsub("[^a-zA-Z0-9_]", "_", name)  # Replace special characters with "_"
+  name <- substr(name, 1, 50)  # Truncate to prevent long names
+  return(name)
+}
+
+# ---- Load Species Trait Data ---- #
+traits <- read.csv("SppTraitCats_for_LandscapeAnalysis2.csv", stringsAsFactors=FALSE)
+
+if (!"File_Name" %in% colnames(traits)) {
+  stop("ERROR: 'File_Name' column not found in CSV. Check column names with colnames(traits).")
+}
+
+traits$File_Name <- trimws(traits$File_Name)
+grouping_vars <- c("NAT_IUCN", "FG", "Habitat_Specificity", "Body_Size", "Hunting_V", "TL_Cat")
+species_files <- traits$File_Name
+species_rasters <- rast(species_files)
+names(species_rasters) <- traits$File_Name
+
+# ---- Open a Multi-Page PDF ---- #
+pdf("Summed_Occupancy_Comparisons_varScale.pdf", width=12, height=10)
+
+# ---- Process Each Species-Level Grouping Variable ---- #
+for (var in grouping_vars) {
+  
+  print(paste("Processing:", var))
+
+  categories <- unique(traits[[var]])
+  category_rasters <- list()
+  plot_list <- list()  # Store plots for grid arrangement
+
+  for (cat in categories) {
+    
+    print(paste("Summing occupancy for:", cat))
+    species_in_category <- traits$File_Name[traits[[var]] == cat]
+    valid_species <- species_in_category[species_in_category %in% names(species_rasters)]
+
+    if (length(valid_species) > 0) {
+      rasters_in_category <- species_rasters[[valid_species]]
+      summed_raster <- app(rasters_in_category, sum, na.rm=TRUE)
+      category_rasters[[cat]] <- summed_raster
+    } else {
+      print(paste("⚠ Warning: No matching species found for category:", cat))
+    }
+  }
+  
+  # ---- Arrange Multiple Plots on One Page ---- #
+  if (length(category_rasters) > 0) {
+    for (cat in categories) {
+      if (!is.null(category_rasters[[cat]])) {
+        safe_cat <- sanitize_filename(cat)  # Ensure valid file name
+        print(paste("Generating plot for:", var, "-", safe_cat))  
+
+        # Get category-specific min/max for variable scaling
+        cat_min <- min(values(category_rasters[[cat]]), na.rm=TRUE)
+        cat_max <- max(values(category_rasters[[cat]]), na.rm=TRUE)
+
+        plot_obj <- levelplot(category_rasters[[cat]], 
+                              main = paste("Summed Occupancy -", var, "-", cat), 
+                              margin = FALSE, 
+                              col.regions = terrain.colors(10),
+                              at = seq(cat_min, cat_max, length.out=11))  # Variable scale
+
+        plot_list[[cat]] <- plot_obj  # Store plot in list
+      }
+    }
+  }
+
+  # ---- Print All Plots for One Species Grouping on a Single Page ---- #
+  if (length(plot_list) > 0) {
+    grid.arrange(grobs = plot_list, ncol=2, nrow=ceiling(length(plot_list)/2),
+                 top = paste("Summed Occupancy for", var, "(Variable Scale)"))  # 2 columns, dynamic row count
+  }
+}
+
+# ---- Close PDF ---- #
+dev.off()
+print("✅ Completed Summing & Mapping for All Species-Level Grouping Variables (Variable Scale).")
+
+
+
+############# Step 4: Wilcoxon Comparison Tests for Species-Level Grouping Variable Categories by Landscape Grouping Variables
+
+
+library(terra)
+library(dplyr)
+
+# ---- Load Species Trait Data ---- #
+traits <- read.csv("SppTraitCats_for_LandscapeAnalysis2.csv", stringsAsFactors=FALSE)
+
+if (!"File_Name" %in% colnames(traits)) {
+  stop("ERROR: 'File_Name' column not found in CSV. Check column names with colnames(traits).")
+}
+
+traits$File_Name <- trimws(traits$File_Name)
+
+# ---- Define Species-Level Grouping Variables ---- #
+grouping_vars <- c("NAT_IUCN", "FG", "Habitat_Specificity", "Body_Size", "Hunting_V", "TL_Cat")
+
+# ---- Load Summed Species Occupancy Rasters ---- #
+summed_rasters <- list.files(pattern = "Summed_Occupancy_.*\\.tif$", full.names = TRUE)
+summed_stack <- rast(summed_rasters)
+
+# ---- Load Landscape Grouping Variables ---- #
+protected_status <- rast("PatchProtectedStatus.tif")
+patch_size <- rast("PatchAreaCategories.tif")
+
+# ---- Resample & Align Rasters ---- #
+protected_status <- resample(protected_status, summed_stack, method="near")
+patch_size <- resample(patch_size, summed_stack, method="near")
+
+protected_status <- crop(protected_status, summed_stack) %>% mask(summed_stack)
+patch_size <- crop(patch_size, summed_stack) %>% mask(summed_stack)
+
+# ---- Extract Values into Data Frame ---- #
+df_species <- as.data.frame(summed_stack, xy=TRUE)
+df_species$protected_status <- extract(protected_status, df_species[, c("x", "y")], method="simple")[,2]
+df_species$patch_size <- extract(patch_size, df_species[, c("x", "y")], method="simple")[,2]
+
+# ---- Rename Columns to Match Raster Names ---- #
+raster_names <- gsub("\\.tif$", "", basename(summed_rasters))
+colnames(df_species)[3:(2+length(raster_names))] <- raster_names
+
+# ---- Remove NA Values ---- #
+df_species <- na.omit(df_species)
+
+# ---- Function to Convert Pairwise Wilcoxon Test Results to Long Format ---- #
+convert_pairwise_pvals <- function(p_matrix, var, cat) {
+  p_df <- as.data.frame(as.table(p_matrix))  # Convert matrix to data frame
+  colnames(p_df) <- c("Group1", "Group2", "P_Value")
+  p_df$Variable <- var
+  p_df$Category <- cat
+  p_df$Test_Type <- "Patch Size"
+  return(p_df)
+}
+
+# ---- Run Wilcoxon Rank Sum Tests ---- #
+protected_results <- list()
+patch_size_results <- list()
+
+for (var in grouping_vars) {
+  
+  print(paste("Processing Wilcoxon Tests for:", var))
+  
+  categories <- unique(traits[[var]])
+  
+  for (cat in categories) {
+    
+    print(paste("Running test for:", var, "-", cat))
+    
+    # Find the correct raster name
+    raster_name <- paste0("Summed_Occupancy_", var, "_", cat)
+    
+    if (raster_name %in% colnames(df_species)) {
+      
+      # Extract values for this category
+      df_category <- df_species %>%
+        select(x, y, protected_status, patch_size, all_of(raster_name)) %>%
+        rename(summed_occupancy = all_of(raster_name))
+
+      # ---- Wilcoxon Test: Protected vs. Unprotected ---- #
+      wilcox_protected <- wilcox.test(summed_occupancy ~ protected_status, data=df_category)
+
+      # Save protected status test results
+      protected_results[[paste(var, cat, "Protected", sep="_")]] <- data.frame(
+        Variable = var,
+        Category = cat,
+        Test_Type = "Protected Status",
+        Group1 = "Unprotected",
+        Group2 = "Protected",
+        P_Value = wilcox_protected$p.value,
+        W_Statistic = wilcox_protected$statistic
+      )
+      
+      # ---- Wilcoxon Test: Patch Size Categories ---- #
+      patch_size_levels <- unique(df_category$patch_size)
+      if (length(patch_size_levels) > 1) {
+        wilcox_patch <- pairwise.wilcox.test(df_category$summed_occupancy, df_category$patch_size, p.adjust.method="BH")
+
+        # Convert pairwise test results into long format
+        pairwise_pvals <- convert_pairwise_pvals(wilcox_patch$p.value, var, cat)
+        
+        # Save pairwise test results
+        patch_size_results[[paste(var, cat, "PatchSize", sep="_")]] <- pairwise_pvals
+      } else {
+        print(paste("⚠ Not enough levels for patch size test in:", var, "-", cat))
+      }
+    } else {
+      print(paste("⚠ Warning: Raster not found for:", raster_name))
+    }
+  }
+}
+
+# ---- Convert to DataFrames & Save as Separate CSV Files ---- #
+protected_results_df <- do.call(rbind, protected_results)
+patch_size_results_df <- do.call(rbind, patch_size_results)
+
+write.csv(protected_results_df, "Wilcoxon_Protected_Comparison.csv", row.names=FALSE)
+write.csv(patch_size_results_df, "Wilcoxon_PatchSize_Comparison.csv", row.names=FALSE)
+
+print("✅ Wilcoxon Tests Completed and Saved!")
+print("✅ Protected Status Test Results Saved: Wilcoxon_Protected_Comparison.csv")
+print("✅ Patch Size Test Results Saved: Wilcoxon_PatchSize_Comparison.csv")
+
+
+
+############## 5 graphical comparison of results
+
+
+############ variation in mean predicted occupancy probability per species trait to landscape trait
+
+
+
+
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tidyr)
+
+# ---- Load Data ---- #
+df_species <- read.csv("Corrected_Species_Occupancy_Data.csv")  # Summed occupancy per species
+traits <- read.csv("SppTraitCats_for_LandscapeAnalysis2.csv")  # Species trait categories
+
+# ---- Standardize Species Names Before Merging ---- #
+df_long <- df_species %>%
+  pivot_longer(cols = setdiff(colnames(df_species), c("x", "y", "protected_status", "patch_size")),
+               names_to = "Species", values_to = "Summed_Occupancy") %>%
+  mutate(
+    Species = gsub("\\.", " ", Species),  # Replace periods with spaces
+    Species = trimws(Species),  # Remove extra spaces
+    Species = tolower(Species)  # Convert to lowercase
+  ) %>%
+  left_join(traits %>%
+              mutate(Species = tolower(trimws(Species))),  # Standardize species names
+            by="Species")  # Merge using `Species` column
+
+# ---- Check If Merging Fixed the Issue ---- #
+print("Checking missing data per species grouping variable after fix:")
+for (species_group in c("NAT_IUCN", "FG", "Habitat_Specificity", "Body_Size", "Hunting_V", "TL_Cat")) {
+  if (species_group %in% colnames(df_long)) {
+    print(paste(species_group, "missing values:", sum(is.na(df_long[[species_group]]))))
+  } else {
+    print(paste("⚠", species_group, "not found in df_long!"))
+  }
+}
+
+# ---- Drop NA Values from Summed Occupancy ---- #
+df_long <- df_long %>% drop_na(Summed_Occupancy)
+
+# ---- Create Output Directory ---- #
+output_dir <- "Summed_Occupancy_Grouped_Boxplots"
+dir.create(output_dir, showWarnings = FALSE)
+
+# ---- Generate Corrected Boxplots ---- #
+for (species_group in c("NAT_IUCN", "FG", "Habitat_Specificity", "Body_Size", "Hunting_V", "TL_Cat")) {
+  
+  if (!species_group %in% colnames(df_long)) {
+    print(paste("⚠ Skipping", species_group, "as it is not in the dataset"))
+    next
+  }
+
+  for (landscape_group in c("protected_status", "patch_size")) {
+
+    df_plot <- df_long %>%
+      filter(!is.na(.data[[species_group]])) %>%
+      mutate(across(c(!!species_group, !!landscape_group), as.factor))  # Convert to factors
+
+    if (nrow(df_plot) == 0) { 
+      print(paste("⚠ Still no valid data for:", species_group, "by", landscape_group, "- Check merging process!"))
+      next
+    }
+
+    # Create correctly structured boxplot
+    plot <- ggplot(df_plot, aes(
+        x=.data[[landscape_group]],  # X-axis is now landscape grouping variable
+        y=Summed_Occupancy,  # Use raw values to restore full distribution
+        fill=.data[[species_group]],  # Color by species grouping variable
+        group=interaction(.data[[species_group]], .data[[landscape_group]])  # Ensure proper grouping
+      )) +
+      geom_boxplot() +  # Restore proper boxplots
+      theme_minimal() +
+      labs(title=paste("Summed Occupancy by", species_group, "Across", landscape_group),
+           x=landscape_group,  # Correct x-axis label
+           y="Summed Occupancy",
+           fill=species_group) +
+      theme(axis.text.x = element_text(angle=45, hjust=1)) +
+      scale_fill_brewer(palette="Set3", name=species_group)  # Ensure correct color mapping
+
+    filename <- paste0(output_dir, "/Summed_Occupancy_", species_group, "_", landscape_group, ".png")
+    ggsave(filename, plot=plot, width=10, height=6, units="in")
+    print(paste("✅ Saved:", filename))
+  }
+}
+
+print("✅ All corrected boxplots successfully created and saved!")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+####################### Graphing mean summed occupancy for each species trait across landscape grouping variables
+
+
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tidyr)
+
+# ---- Load Data ---- #
+df_species <- read.csv("Corrected_Species_Occupancy_Data.csv")  # Summed occupancy per species
+traits <- read.csv("SppTraitCats_for_LandscapeAnalysis2.csv")  # Species trait categories
+
+# ---- Standardize Species Names Before Merging ---- #
+df_long <- df_species %>%
+  pivot_longer(cols = setdiff(colnames(df_species), c("x", "y", "protected_status", "patch_size")),
+               names_to = "Species", values_to = "Summed_Occupancy") %>%
+  mutate(
+    Species = gsub("\\.", " ", Species),  # Replace periods with spaces
+    Species = trimws(Species),  # Remove extra spaces
+    Species = tolower(Species)  # Convert to lowercase
+  ) %>%
+  left_join(traits %>%
+              mutate(Species = tolower(trimws(Species))),  # Standardize species names
+            by="Species")  # Merge using `Species` column
+
+# ---- Check If Merging Fixed the Issue ---- #
+print("Checking missing data per species grouping variable after fix:")
+for (species_group in c("NAT_IUCN", "FG", "Habitat_Specificity", "Body_Size", "Hunting_V", "TL_Cat")) {
+  if (species_group %in% colnames(df_long)) {
+    print(paste(species_group, "missing values:", sum(is.na(df_long[[species_group]]))))
+  } else {
+    print(paste("⚠", species_group, "not found in df_long!"))
+  }
+}
+
+# ---- Drop NA Values from Summed Occupancy ---- #
+df_long <- df_long %>% drop_na(Summed_Occupancy)
+
+# ---- Create Output Directory ---- #
+output_dir <- "Summed_Occupancy_Grouped_Boxplots"
+dir.create(output_dir, showWarnings = FALSE)
+
+# ---- Generate Corrected Boxplots ---- #
+for (species_group in c("NAT_IUCN", "FG", "Habitat_Specificity", "Body_Size", "Hunting_V", "TL_Cat")) {
+  
+  if (!species_group %in% colnames(df_long)) {
+    print(paste("⚠ Skipping", species_group, "as it is not in the dataset"))
+    next
+  }
+
+  for (landscape_group in c("protected_status", "patch_size")) {
+
+    # ---- Sum Occupancy Per Pixel for Each Species Grouping & Landscape Grouping ---- #
+    df_summed <- df_long %>%
+      filter(!is.na(.data[[species_group]])) %>%
+      group_by(x, y, .data[[species_group]], .data[[landscape_group]]) %>%
+      summarise(Summed_Occupancy = sum(Summed_Occupancy, na.rm=TRUE), .groups="drop")  # Sum species occupancy per pixel
+
+    # ---- Convert Grouping Variables to Factors ---- #
+    df_summed <- df_summed %>%
+      mutate(across(c(!!species_group, !!landscape_group), as.factor))  # Convert to factors
+
+    if (nrow(df_summed) == 0) { 
+      print(paste("⚠ Still no valid data for:", species_group, "by", landscape_group, "- Check merging process!"))
+      next
+    }
+
+    # ---- Create Correctly Structured Boxplot ---- #
+    plot <- ggplot(df_summed, aes(
+        x=.data[[landscape_group]],  
+        y=Summed_Occupancy,  
+        fill=as.factor(.data[[species_group]]),  # Ensure fill is treated as a factor
+        group=interaction(.data[[species_group]], .data[[landscape_group]])  
+      )) +
+      geom_boxplot() +  
+      theme_minimal() +
+      labs(title=paste("Summed Occupancy by", species_group, "Across", landscape_group),
+           x=landscape_group,  
+           y="Summed Occupancy",
+           fill=species_group) +
+      theme(axis.text.x = element_text(angle=45, hjust=1)) +
+      scale_fill_brewer(palette="Set3", name=species_group)  
+
+    filename <- paste0(output_dir, "/Summed_Occupancy_", species_group, "_", landscape_group, ".png")
+    ggsave(filename, plot=plot, width=10, height=6, units="in")
+    print(paste("✅ Saved:", filename))
+  }
+}
+
+print("✅ All corrected boxplots successfully created and saved!")
+
+

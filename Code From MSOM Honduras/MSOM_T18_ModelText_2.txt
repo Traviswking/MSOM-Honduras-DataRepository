@@ -1,0 +1,293 @@
+model{
+### PRIORS 
+## occupancy intercept estimate of community (community mean)
+beta0.mean ~ dnorm(0, 0.05)
+beta0.tau ~ dgamma(0.1, 0.1)
+beta0.sigma <- sqrt(1 / beta0.tau)
+
+## detection intercept estimate of community (community mean)
+alpha0.mean ~ dnorm(0, 0.05)
+alpha0.tau ~ dgamma(0.1, 0.1)
+alpha0.sigma <- sqrt(1 / alpha0.tau)
+
+## Data augmentation parameter
+# < empty > 
+
+## Continuous site covariates on detection - Fixed effects
+# < empty > 
+
+## Continuous site covariates on detection - Independent effects
+# < empty > 
+
+## Continuous site covariates on detection - with random effects
+# Covariate: Duration|Species
+
+alpha.ranef.cont.Duration.mean ~ dnorm(0, 0.05)
+alpha.ranef.cont.Duration.tau ~ dgamma(0.1, 0.1)
+alpha.ranef.cont.Duration.sigma <- sqrt(1 / alpha.ranef.cont.Duration.tau)
+
+
+# Covariate: Human_Ratio|Species
+
+alpha.ranef.cont.Human_Ratio.mean ~ dnorm(0, 0.05)
+alpha.ranef.cont.Human_Ratio.tau ~ dgamma(0.1, 0.1)
+alpha.ranef.cont.Human_Ratio.sigma <- sqrt(1 / alpha.ranef.cont.Human_Ratio.tau)
+
+
+# Covariate: AgAnimal_Ratio|Species
+
+alpha.ranef.cont.AgAnimal_Ratio.mean ~ dnorm(0, 0.05)
+alpha.ranef.cont.AgAnimal_Ratio.tau ~ dgamma(0.1, 0.1)
+alpha.ranef.cont.AgAnimal_Ratio.sigma <- sqrt(1 / alpha.ranef.cont.AgAnimal_Ratio.tau)
+
+
+## Categorical site covariates on detection - Fixed effect
+# < empty > 
+
+## Categorical site covariates on detection - with random effects
+# Community mean effects of C_Function
+alpha.ranef.categ.C_Function.mean[1] <- 0
+alpha.ranef.categ.C_Function.tau[1] <- 0
+alpha.ranef.categ.C_Function.sigma[1] <- 0
+
+for(index_cat_ranef_det_C_Function in 2:3) {
+alpha.ranef.categ.C_Function.mean[index_cat_ranef_det_C_Function] ~ dnorm(0, 0.05)
+alpha.ranef.categ.C_Function.tau[index_cat_ranef_det_C_Function] ~ dgamma(0.1, 0.1)
+alpha.ranef.categ.C_Function.sigma[index_cat_ranef_det_C_Function] <- sqrt(1 / alpha.ranef.categ.C_Function.tau[index_cat_ranef_det_C_Function])
+}
+## Continuous observation-level covariates on detection - Fixed effects
+# < empty > 
+
+## Continuous observation-level covariates on detection - with random effects
+# Observation Covariate: Seasonality
+alpha.obs.ranef.cont.Seasonality.mean ~ dnorm(0, 0.05)
+alpha.obs.ranef.cont.Seasonality.tau ~ dgamma(0.1, 0.1)
+alpha.obs.ranef.cont.Seasonality.sigma <- sqrt(1 / alpha.obs.ranef.cont.Seasonality.tau)
+
+## Categorical observation-level covariates on detection - Fixed effect
+# < empty > 
+
+## Categorical observation-level covariates on detection - with random effects
+# < empty > 
+
+## Continuous site covariates on Occupancy - Fixed effects
+# < empty > 
+
+## Continuous site covariates on Occupancy - Independent effects
+# < empty > 
+
+## Continuous site covariates on occupancy - with random effects
+# Covariate: P_Area_log|Species
+
+beta.ranef.cont.P_Area_log.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.P_Area_log.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.P_Area_log.sigma <- sqrt(1 / beta.ranef.cont.P_Area_log.tau)
+
+
+# Covariate: D_2_Core|Species
+
+beta.ranef.cont.D_2_Core.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.D_2_Core.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.D_2_Core.sigma <- sqrt(1 / beta.ranef.cont.D_2_Core.tau)
+
+
+# Covariate: Canopy|Species
+
+beta.ranef.cont.Canopy.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.Canopy.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.Canopy.sigma <- sqrt(1 / beta.ranef.cont.Canopy.tau)
+
+
+# Covariate: D_2_PA|Species
+
+beta.ranef.cont.D_2_PA.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.D_2_PA.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.D_2_PA.sigma <- sqrt(1 / beta.ranef.cont.D_2_PA.tau)
+
+
+# Covariate: HMI|Species
+
+beta.ranef.cont.HMI.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.HMI.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.HMI.sigma <- sqrt(1 / beta.ranef.cont.HMI.tau)
+
+
+# Covariate: VNL_2|Species
+
+beta.ranef.cont.VNL_2.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.VNL_2.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.VNL_2.sigma <- sqrt(1 / beta.ranef.cont.VNL_2.tau)
+
+
+# Covariate: Elev|Species
+
+beta.ranef.cont.Elev.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.Elev.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.Elev.sigma <- sqrt(1 / beta.ranef.cont.Elev.tau)
+
+
+# Covariate: NPP|Species
+
+beta.ranef.cont.NPP.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.NPP.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.NPP.sigma <- sqrt(1 / beta.ranef.cont.NPP.tau)
+
+
+# Covariate: Precip|Species
+
+beta.ranef.cont.Precip.mean ~ dnorm(0, 0.05)
+beta.ranef.cont.Precip.tau ~ dgamma(0.1, 0.1)
+beta.ranef.cont.Precip.sigma <- sqrt(1 / beta.ranef.cont.Precip.tau)
+
+
+## Categorical site covariates on Occupancy - Fixed effects
+# < empty > 
+
+## Categorical site covariates on occupancy - with random effects
+# < empty > 
+
+# Species-station random effect on detection probability
+# < empty > 
+
+## Draws of random effects other than species
+
+
+### MODEL LOOPS 
+
+# species loop
+for (i in 1:M){
+##  Draw species-specific random effect parameters from community distributions
+# intercepts:
+beta0[i] ~ dnorm(beta0.mean, beta0.tau)
+alpha0[i] ~ dnorm(alpha0.mean, alpha0.tau)
+
+
+# continuous detection covariate with random effects: Duration|Species
+alpha.ranef.cont.Duration[i] ~ dnorm(alpha.ranef.cont.Duration.mean, alpha.ranef.cont.Duration.tau)
+# continuous detection covariate with random effects: Human_Ratio|Species
+alpha.ranef.cont.Human_Ratio[i] ~ dnorm(alpha.ranef.cont.Human_Ratio.mean, alpha.ranef.cont.Human_Ratio.tau)
+# continuous detection covariate with random effects: AgAnimal_Ratio|Species
+alpha.ranef.cont.AgAnimal_Ratio[i] ~ dnorm(alpha.ranef.cont.AgAnimal_Ratio.mean, alpha.ranef.cont.AgAnimal_Ratio.tau)
+
+
+# categorical detection covariates with random effects:
+alpha.ranef.categ.C_Function[i, 1] <- 0
+for (index_cat_ranef_det_C_Function in 2:3){
+alpha.ranef.categ.C_Function[i, index_cat_ranef_det_C_Function] ~ dnorm(alpha.ranef.categ.C_Function.mean[index_cat_ranef_det_C_Function], alpha.ranef.categ.C_Function.tau[index_cat_ranef_det_C_Function])
+}
+
+
+# continuous detection covariates with random effects:
+alpha.obs.ranef.cont.Seasonality[i] ~ dnorm(alpha.obs.ranef.cont.Seasonality.mean, alpha.obs.ranef.cont.Seasonality.tau)
+
+
+# categorical observation covariates: no random effect of species
+
+
+# continuous occupancy covariate with random effects: P_Area_log|Species
+beta.ranef.cont.P_Area_log[i] ~ dnorm(beta.ranef.cont.P_Area_log.mean, beta.ranef.cont.P_Area_log.tau)
+# continuous occupancy covariate with random effects: D_2_Core|Species
+beta.ranef.cont.D_2_Core[i] ~ dnorm(beta.ranef.cont.D_2_Core.mean, beta.ranef.cont.D_2_Core.tau)
+# continuous occupancy covariate with random effects: Canopy|Species
+beta.ranef.cont.Canopy[i] ~ dnorm(beta.ranef.cont.Canopy.mean, beta.ranef.cont.Canopy.tau)
+# continuous occupancy covariate with random effects: D_2_PA|Species
+beta.ranef.cont.D_2_PA[i] ~ dnorm(beta.ranef.cont.D_2_PA.mean, beta.ranef.cont.D_2_PA.tau)
+# continuous occupancy covariate with random effects: HMI|Species
+beta.ranef.cont.HMI[i] ~ dnorm(beta.ranef.cont.HMI.mean, beta.ranef.cont.HMI.tau)
+# continuous occupancy covariate with random effects: VNL_2|Species
+beta.ranef.cont.VNL_2[i] ~ dnorm(beta.ranef.cont.VNL_2.mean, beta.ranef.cont.VNL_2.tau)
+# continuous occupancy covariate with random effects: Elev|Species
+beta.ranef.cont.Elev[i] ~ dnorm(beta.ranef.cont.Elev.mean, beta.ranef.cont.Elev.tau)
+# continuous occupancy covariate with random effects: NPP|Species
+beta.ranef.cont.NPP[i] ~ dnorm(beta.ranef.cont.NPP.mean, beta.ranef.cont.NPP.tau)
+# continuous occupancy covariate with random effects: Precip|Species
+beta.ranef.cont.Precip[i] ~ dnorm(beta.ranef.cont.Precip.mean, beta.ranef.cont.Precip.tau)
+
+
+# categorical occupancy covariates: no random effect of species
+
+# station loop
+for (j in 1:J){
+
+# Abundance formula
+
+log.lambda[i,j] <- beta0[i] + beta.ranef.cont.P_Area_log[i] * P_Area_log[j] + beta.ranef.cont.D_2_Core[i] * D_2_Core[j] + beta.ranef.cont.Canopy[i] * Canopy[j] + beta.ranef.cont.D_2_PA[i] * D_2_PA[j] + beta.ranef.cont.HMI[i] * HMI[j] + beta.ranef.cont.VNL_2[i] * VNL_2[j] + beta.ranef.cont.Elev[i] * Elev[j] + beta.ranef.cont.NPP[i] * NPP[j] + beta.ranef.cont.Precip[i] * Precip[j]
+lambda[i,j] <- exp(log.lambda[i,j])
+
+# convert lambda to psi
+psi[i,j] <- 1 - dpois(0, lambda[i,j])
+
+# Occupancy_status matrix
+z[i,j] <- ifelse(z_lambda[i,j] >= 1, 1, 0)
+
+# Expected abundance matrix
+z_lambda[i,j] ~ dpois(lambda[i,j])
+
+# No random effect of species and station on detection probability
+# occasion loop
+for (k in 1:maxocc){
+# Detection probability formula
+logit.p[i,j,k] <- alpha0[i] + alpha.obs.ranef.cont.Seasonality[i] * Seasonality[j, k] + alpha.ranef.categ.C_Function[i, C_Function[j]] + alpha.ranef.cont.Duration[i] * Duration[j] + alpha.ranef.cont.Human_Ratio[i] * Human_Ratio[j] + alpha.ranef.cont.AgAnimal_Ratio[i] * AgAnimal_Ratio[j]
+
+# convert p to real scale
+p[i,j,k] <- exp(logit.p[i,j,k]) / (1+exp(logit.p[i,j,k]))
+
+# Ensure occasions without effort have p = 0
+p.e[i,j,k] <- p[i,j,k] * effort_binary[j,k]
+p.eff[i,j,k] <-  1-(1-p.e[i,j,k])^z_lambda[i,j]
+
+y[i,j,k] ~ dbern(p.eff[i,j,k])
+
+### generate new data from model under consideration
+new.y[i,j,k] ~ dbern(p.eff[i,j,k])
+}   # close occasion loop
+
+### calculate Freeman-Tukey residuals for real and new data
+res[i,j] <- (sqrt(sum(y[i,j, 1:maxocc])) - sqrt(sum(p.eff[i,j, 1:maxocc])))^2
+new.res[i,j] <- (sqrt(sum(new.y[i,j, 1:maxocc])) - sqrt(sum(p.eff[i,j, 1:maxocc])))^2
+}   # close station loop
+
+### sum residuals over stations
+R2[i] <- sum(res[i, 1:J])
+new.R2[i] <- sum(new.res[i, 1:J])
+
+### species-level Bayesian p-value
+Bpvalue_species[i] <- new.R2[i] > R2[i] 
+
+
+
+### Number of occupied stations for each species
+NStationsOccupied[i] <- sum(z[i, 1:J])
+
+### species is part of community?
+speciesInCommunity[i] <- 1 - equals(NStationsOccupied[i],0)
+
+### Fraction of stations occupied
+fractionStationsOccupied[i] <- NStationsOccupied[i] /J
+
+### Does species occur at all (at any station)
+occ[i] <- 1 - equals(fractionStationsOccupied[i], 0)
+
+##############
+######### added code for mean psi and p per species
+############
+
+mu.psi[i] <- mean(psi[i, 1:J])
+mu.p[i] <- mean(p.eff[i,1:J,])
+
+}    # close species loop
+
+###sum residuals over observed species
+R3 <- sum(R2[1:M])
+new.R3 <- sum(new.R2[1:M])
+Bpvalue <- mean(Bpvalue_species[1:M]) ########## average across each estimate
+
+### total number of species
+Nspecies <- sum(speciesInCommunity[1:M])
+
+### Species richness at every location
+for (j in 1:J){
+Nspecies_station[j] <- sum(z[1:M,j])
+}
+
+}

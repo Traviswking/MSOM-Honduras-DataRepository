@@ -1,0 +1,193 @@
+########## Project spatial predictions of Occ and Sp richness in CamtrapR based off results of MSOM_Honduras_18_2
+#### some general notes:
+##### 1. layers are covering only the estimated forest patches in Honduras from the d80 1km forest patch work used in landscapemetrics
+##### 2. note Patch Area was logged and VNL capped at max value of 2 to help control outliers and extreme spread of data 
+##### note patch cov values scaled to match modeling output
+
+library(camtrapR)
+library(purrr)
+library(DT)
+library(knitr)
+library(ggplot2)
+library(sf)
+library(rlist)
+library(rjags)
+library(coda)
+library(gridExtra)
+
+library(terra)
+
+####### covariate layers of occ from MSOMtesT18
+
+setwd("~/2021 Honduras/24_ForestPatchCovariateProjections/StudyAreaClip_V7")
+
+toScale <-  read.csv("~/2021 Honduras/24_ForestPatchCovariateProjections/Sample_Standardization_Work/Sampled_Covs_STAD_ScalingValues_V22.csv")
+
+Patch_d_2_PA <- scale(rast("Patch_d_2_PAc.tif"), center = toScale$MEAN[1], scale = toScale$SD[1])
+
+############# Transforming raw P_Area from ha to log10 transformed km2
+############# must divide raw values by 100 to get raw km2 values then take the log10 transformation of the raw km2 values.
+
+PatchAreaLog <- log10(rast("PatchAreac.tif")/100)
+
+### plot(PatchAreaLog)
+
+##### scale this transformed Patch Area
+
+PatchAreaLog <- scale(PatchAreaLog, center = toScale$MEAN[2], scale = toScale$SD[2])
+
+Patch_d_2_Core <- scale(rast("Patch_d_2_Corec.tif"), center = toScale$MEAN[3], scale = toScale$SD[3])
+
+PatchGEDI <- scale(rast("PatchGEDIc.tif"), center = toScale$MEAN[4], scale = toScale$SD[4])
+
+PatchElev <- scale(rast("PatchElevc.tif"), center = toScale$MEAN[5], scale = toScale$SD[5])
+
+PatchNPP <- scale(rast("PatchNPPc.tif"), center = toScale$MEAN[6], scale = toScale$SD[6])
+
+PatchPrecip <- scale(rast("PatchPrecipc.tif"), center = toScale$MEAN[7], scale = toScale$SD[7])
+
+PatchHMI <- scale(rast("PatchHMIc.tif"), center = toScale$MEAN[8], scale = toScale$SD[8])
+
+PatchVNL <- scale(rast("PatchVNLc.tif"), center = toScale$MEAN[9], scale = toScale$SD[9])
+
+
+
+
+
+
+######## stacking layers
+
+stack_prediction <- rast(list(P_Area_log = PatchAreaLog, D_2_Core = Patch_d_2_Core, Canopy = PatchGEDI, D_2_PA = Patch_d_2_PA, HMI = PatchHMI, VNL_2 = PatchVNL, Elev = PatchElev, NPP = PatchNPP, Precip = PatchPrecip))
+
+plot(stack_prediction)
+
+
+
+########## MSOMtesT18 MCMC results 
+
+fit.jagsT18_test <- readRDS("C:/Users/Home/Documents/22_Kamiak_MultiSpecies_Work/MSOM_T18_Outputs/fit.jagsT18_test.rds")
+mod.jagsT18_test <- readRDS("C:/Users/Home/Documents/22_Kamiak_MultiSpecies_Work/MSOM_T18_Outputs/mod.jagsT18_test.rds")
+
+###### creating occ prediction pulls
+
+predictions_psi <- predict(object    = mod.jagsT18_test, 
+                             mcmc.list = fit.jagsT18_test,
+                             x         = stack_prediction,
+                             type      = "psi",
+			     batch     = TRUE,
+                             draws     = 1000)
+
+######## plotting predictions for occ
+
+ psi_projection <- plot(predictions_psi$mean, zlim = c(0,1), 
+       col = hcl.colors(100), 
+       maxnl = 2,   # plotting only the first 2 species for space reasons
+       asp = 1) 
+
+
+
+
+### species richness estimates
+
+  predictions_rich <- predict(object   = mod.jagsT18_test, 
+                             mcmc.list = fit.jagsT18_test,
+                             x         = stack_prediction,
+                             type      = "richness",
+				batch     = TRUE,
+				draws     = 1000)
+  
+ rich_projection_mean <- plot(predictions_rich$mean, col = hcl.colors(100), asp = 1)
+ rich_projection_SD <- plot(predictions_rich$sd, col = hcl.colors(100), asp = 1)
+
+
+
+########### printing and new output Geotiffs
+
+
+### C:/Users/Home/Documents/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions
+
+## Species Richness GeoTiffs
+terra::writeRaster(predictions_rich$mean, "C:/Users/Home/Documents/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions_T18/T18_Richness_Mean.tif", filetype = "GTiff", overwrite = TRUE)
+terra::writeRaster(predictions_rich$sd, "C:/Users/Home/Documents/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions_T18/T18_Richness_SD.tif", filetype = "GTiff", overwrite = TRUE)
+
+## Species Richness Plots
+
+setwd("~/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions_T18")
+
+
+r_m <- rast("T18_Richness_Mean.tif")
+plot(r_m)
+
+r_sd <- rast("T18_Richness_SD.tif")
+plot(r_sd)
+
+########## export plots as pdfs using the export option on the plot viewer 
+
+############## attempts at outputing GeoTiffs of psi
+
+terra::writeRaster(predictions_psi$mean, "C:/Users/Home/Documents/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions_T18/T18_psi_Mean.tif", filetype = "GTiff", overwrite = TRUE)
+terra::writeRaster(predictions_psi$sd, "C:/Users/Home/Documents/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions_T18/T18_psi_SD.tif", filetype = "GTiff", overwrite = TRUE)
+
+names(predictions_psi$mean)
+
+variables <- as.factor(c(names(predictions_psi$mean)))
+
+for (i in variables)
+{
+  writeRaster(predictions_psi$mean[[i]], filename = paste0("~/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions_T18/T18_psi_Mean_", i, ".tif"), filetype = "GTiff", overwrite = TRUE)
+}
+
+for (i in variables)
+{
+  writeRaster(predictions_psi$sd[[i]], filename = paste0("~/2021 Honduras/24_ForestPatchCovariateProjections/Output_Predictions_T18/T18_psi_SD_", i, ".tif"), filetype = "GTiff", overwrite = TRUE)
+}
+
+
+
+######### attempts at outputing the psi predictions as PDF with one species per page
+
+
+names(predictions_psi$mean)
+
+variables <- as.factor(c(names(predictions_psi$mean)))
+
+pdf(file = "T18_psi_Mean.pdf", width = 11, height = 8.5)
+
+for (i in variables)
+{
+  plot(predictions_psi$mean[[i]], main = i, range = c(0,1))
+}
+
+dev.off()
+
+names(predictions_psi$mean)
+
+variables <- as.factor(c(names(predictions_psi$mean)))
+
+pdf(file = "T18_psi_SD.pdf", width = 11, height = 8.5)
+
+for (i in variables)
+{
+  plot(predictions_psi$sd[[i]], main = i, range = c(0,0.4))
+}
+
+dev.off()
+
+
+
+
+names(predictions_psi$mean)
+
+variables <- as.factor(c(names(predictions_psi$mean)))
+
+pdf(file = "T18_psi_SD.pdf", width = 11, height = 8.5)
+
+for (i in variables)
+{
+  plot(predictions_psi$sd[[i]], main = i, range = c(0,0.4))
+}
+
+dev.off()
+
+
+

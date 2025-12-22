@@ -1,0 +1,438 @@
+# Load necessary libraries
+library(tidyverse)
+library(bayestestR)
+
+# File paths
+mcmc_file <- "FullMCMC_T18_2.csv"
+traits_file <- "SppTraitCats_Testing_5.csv"
+prepared_data_rds <- "Prepared_Data_V4.rds"
+
+# Load datasets
+mcmc_df <- read.csv(mcmc_file, check.names = FALSE)
+traits_df <- read.csv(traits_file)
+
+# Define the 9 occupancy covariates
+covariates <- c("Canopy", "D_2_Core", "D_2_PA", "Elev", "HMI", "NPP", "P_Area_log", "Precip", "VNL_2")
+
+# Extract species-specific columns for each occupancy covariate
+species_covariate_data <- list()
+
+for (cov in covariates) {
+  covariate_columns <- grep(paste0("beta.ranef.cont.", cov, "\\[[0-9]+\\]"), colnames(mcmc_df), value = TRUE)
+  
+  cov_df <- mcmc_df[, covariate_columns]
+  
+  species_numbers <- gsub(".*\\[([0-9]+)\\]", "\\1", covariate_columns)
+  species_mapping <- setNames(traits_df$Species, as.character(1:30))
+  colnames(cov_df) <- species_mapping[species_numbers]
+
+  cov_long_df <- cov_df %>%
+    pivot_longer(cols = everything(), names_to = "Species", values_to = "Posterior_Estimate")
+
+  cov_long_df$Covariate <- cov
+  
+  species_covariate_data[[cov]] <- cov_long_df
+}
+
+long_df <- bind_rows(species_covariate_data)
+
+merged_df <- long_df %>%
+  left_join(traits_df, by = "Species")
+
+# Define categorical grouping variables
+grouping_vars <- c("IUCN", "NAT_IUCN", "Bodymass_Cat", "T_Cat", "FG", "Hunting_V", "Habitat_specificity")
+
+merged_df <- merged_df %>%
+  mutate(across(all_of(grouping_vars), as.factor))
+
+# Extract Community Mean Responses
+community_mean_columns <- grep("beta.ranef.cont\\.[^.]+\\.mean", colnames(mcmc_df), value = TRUE)
+
+community_means <- mcmc_df[, community_mean_columns] %>%
+  summarise(across(everything(), mean)) %>%
+  pivot_longer(cols = everything(), names_to = "Covariate", values_to = "Community_Mean")
+
+community_means$Covariate <- gsub("beta.ranef.cont.", "", community_means$Covariate)
+community_means$Covariate <- gsub(".mean", "", community_means$Covariate)
+
+# Save prepared data for reuse in other scripts
+saveRDS(list(merged_df = merged_df, community_means = community_means, grouping_vars = grouping_vars),
+        prepared_data_rds)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############### Section 2 Graphics
+
+
+# Load necessary libraries
+library(tidyverse)
+library(ggplot2)
+library(ggridges)
+
+# File paths
+prepared_data_rds <- "Prepared_Data_V4.rds"
+forest_plot_pdf <- "Forest_Plots_V4.pdf"
+ridge_plot_pdf <- "Ridge_Plots_V4.pdf"
+
+# Load prepared data
+data_list <- readRDS(prepared_data_rds)
+merged_df <- data_list$merged_df
+community_means <- data_list$community_means
+grouping_vars <- data_list$grouping_vars
+
+# Initialize lists for plots
+forest_plot_list <- list()
+ridge_plot_list <- list()
+
+for (group_var in grouping_vars) {
+  cat("\nGenerating Plots for:", group_var, "\n")
+
+  # Ridge Plot (Posterior Distributions Across Groups)
+  ridge_plot <- ggplot(merged_df, aes(x = Posterior_Estimate, y = as.factor(!!sym(group_var)), fill = !!sym(group_var))) +
+    geom_density_ridges(alpha = 0.6) +
+    facet_wrap(~ Covariate, scales = "free_x") +
+    geom_vline(data = community_means, aes(xintercept = Community_Mean), linetype = "dashed", color = "black", size = 1) +  
+    theme_minimal() +
+    labs(x = "Posterior Estimate", y = paste(group_var, "Category"), 
+         title = paste("Posterior Distributions by", group_var, "and Covariate"))
+
+  ridge_plot_list[[group_var]] <- ridge_plot  
+
+  # Compute summary statistics for forest plots
+  group_comparison <- merged_df %>%
+    group_by(!!sym(group_var), Covariate) %>%
+    summarise(
+      mean_estimate = mean(Posterior_Estimate, na.rm = TRUE),
+      ci_75_lower = quantile(Posterior_Estimate, 0.125, na.rm = TRUE),
+      ci_75_upper = quantile(Posterior_Estimate, 0.875, na.rm = TRUE),
+      ci_95_lower = quantile(Posterior_Estimate, 0.025, na.rm = TRUE),
+      ci_95_upper = quantile(Posterior_Estimate, 0.975, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  # Merge Community Mean Responses for reference
+  group_comparison <- left_join(group_comparison, community_means, by = "Covariate") %>%
+    rename(Community_Mean_Cov = Community_Mean)
+
+  # Forest Plot (Posterior Estimates with Confidence Intervals)
+  forest_plot <- ggplot(group_comparison, aes(y = as.factor(!!sym(group_var)), x = mean_estimate)) +
+    geom_errorbarh(aes(xmin = ci_95_lower, xmax = ci_95_upper), color = "gray30", height = 0) +  # 95% CI
+    geom_errorbarh(aes(xmin = ci_75_lower, xmax = ci_75_upper), color = "gray50", height = 0, size = 2) +  # 75% CI
+    geom_point(size = 2, color = "black", shape = 16) +  # Mean Estimate
+    geom_vline(aes(xintercept = Community_Mean_Cov), linetype = "dashed", color = "black", size = 1) +  # Community Mean
+    facet_wrap(~ Covariate, scales = "free_x") +
+    theme_minimal() +
+    labs(x = "Posterior Mean (75% & 95% CI)", y = paste(group_var, "Category"), 
+         title = paste("Forest Plot of Group-Level Effects for", group_var))
+
+  forest_plot_list[[group_var]] <- forest_plot  
+}
+
+# Export Plots
+pdf(forest_plot_pdf, width = 10, height = 8)
+for (plot in forest_plot_list) if (!is.null(plot)) print(plot)
+dev.off()
+
+pdf(ridge_plot_pdf, width = 10, height = 8)
+for (plot in ridge_plot_list) if (!is.null(plot)) print(plot)
+dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+############## section 3 csv outputs
+
+
+# Load necessary libraries
+library(tidyverse)
+library(bayestestR)
+
+# File paths
+prepared_data_rds <- "Prepared_Data_V4.rds"
+summary_csv <- "Group_Comparison_Summary_V4.csv"
+comparison_csv <- "Significant_Differences_V4.csv"
+overlap_csv <- "Posterior_Overlap_V4.csv"
+
+# Load prepared data
+data_list <- readRDS(prepared_data_rds)
+merged_df <- data_list$merged_df
+community_means <- data_list$community_means
+grouping_vars <- data_list$grouping_vars
+
+# Initialize lists for CSV outputs
+summary_list <- list()
+comparison_list <- list()
+overlap_list <- list()
+
+for (group_var in grouping_vars) {
+  cat("\nProcessing CSV Outputs for:", group_var, "\n")
+
+  # Compute summary statistics for group comparison
+  group_comparison <- merged_df %>%
+    group_by(!!sym(group_var), Covariate) %>%
+    summarise(
+      mean_estimate = mean(Posterior_Estimate, na.rm = TRUE),
+      ci_75_lower = quantile(Posterior_Estimate, 0.125, na.rm = TRUE),
+      ci_75_upper = quantile(Posterior_Estimate, 0.875, na.rm = TRUE),
+      ci_95_lower = quantile(Posterior_Estimate, 0.025, na.rm = TRUE),
+      ci_95_upper = quantile(Posterior_Estimate, 0.975, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  # Merge Community Mean Responses for reference
+  group_comparison <- left_join(group_comparison, community_means, by = "Covariate") %>%
+    rename(Community_Mean_Cov = Community_Mean)
+
+  summary_list[[group_var]] <- group_comparison  # Store for summary CSV
+
+  # ---- Significant Differences Calculation ---- #
+  unique_categories <- unique(group_comparison[[group_var]])
+
+  if (length(unique_categories) > 1) {
+    comparison_results <- expand_grid(
+      Category1 = unique_categories,
+      Category2 = unique_categories,
+      Covariate = unique(group_comparison$Covariate)
+    ) %>%
+      filter(Category1 != Category2) %>%
+      left_join(group_comparison, by = c("Category1" = group_var, "Covariate")) %>%
+      rename(Mean_Cat1 = mean_estimate, CI_75_Lower_Cat1 = ci_75_lower, CI_75_Upper_Cat1 = ci_75_upper,
+             CI_95_Lower_Cat1 = ci_95_lower, CI_95_Upper_Cat1 = ci_95_upper) %>%
+      left_join(group_comparison, by = c("Category2" = group_var, "Covariate")) %>%
+      rename(Mean_Cat2 = mean_estimate, CI_75_Lower_Cat2 = ci_75_lower, CI_75_Upper_Cat2 = ci_75_upper,
+             CI_95_Lower_Cat2 = ci_95_lower, CI_95_Upper_Cat2 = ci_95_upper)
+
+    # Add back Community Mean Reference
+    comparison_results <- left_join(comparison_results, community_means, by = "Covariate") %>%
+      rename(Community_Mean_Cov = Community_Mean)
+
+    # Compute if means are significantly different
+    comparison_results <- comparison_results %>%
+      mutate(
+        Outside_95_CI = (Mean_Cat1 < CI_95_Lower_Cat2 | Mean_Cat1 > CI_95_Upper_Cat2) |
+                        (Mean_Cat2 < CI_95_Lower_Cat1 | Mean_Cat2 > CI_95_Upper_Cat1),
+        Outside_75_CI = (Mean_Cat1 < CI_75_Lower_Cat2 | Mean_Cat1 > CI_75_Upper_Cat2) |
+                        (Mean_Cat2 < CI_75_Lower_Cat1 | Mean_Cat2 > CI_75_Upper_Cat1),
+        Outside_Community_Mean = (CI_95_Lower_Cat1 > Community_Mean_Cov | CI_95_Upper_Cat1 < Community_Mean_Cov),
+        Outside_75_CI_Community = (CI_75_Lower_Cat1 > Community_Mean_Cov | CI_75_Upper_Cat1 < Community_Mean_Cov)
+      )
+
+    if (nrow(comparison_results) > 0) {
+      comparison_list[[group_var]] <- comparison_results
+    }
+  }
+
+  # ---- FIXED Posterior Distribution Overlap Calculation ---- #
+  overlap_results <- merged_df %>%
+    group_by(!!sym(group_var), Covariate) %>%
+    summarise(Posterior_Distribution = list(Posterior_Estimate), .groups = "drop") %>%
+    rename(Category1 = !!sym(group_var))
+
+  # Generate category pairs and join properly
+  overlap_results <- overlap_results %>%
+    inner_join(overlap_results, by = "Covariate", suffix = c("_Cat1", "_Cat2")) %>%
+    filter(Category1_Cat1 != Category1_Cat2) %>%
+    mutate(Overlap = map2_dbl(Posterior_Distribution_Cat1, Posterior_Distribution_Cat2, 
+                              ~ overlap(unlist(.x), unlist(.y)))) %>%
+    select(Category1 = Category1_Cat1, Category2 = Category1_Cat2, Covariate, Overlap)
+
+  if (nrow(overlap_results) > 0) {
+    overlap_list[[group_var]] <- overlap_results
+  }
+}
+
+# ---- Export CSV Outputs ---- #
+# Summary Statistics
+write.csv(bind_rows(summary_list, .id = "Grouping_Variable"), summary_csv, row.names = FALSE)
+
+# Significant Differences
+if (length(comparison_list) > 0) {
+  write.csv(bind_rows(comparison_list, .id = "Grouping_Variable"), comparison_csv, row.names = FALSE)
+} else {
+  cat("\n Warning: No significant differences found\n")
+}
+
+# Posterior Overlap
+if (length(overlap_list) > 0) {
+  write.csv(bind_rows(overlap_list, .id = "Grouping_Variable"), overlap_csv, row.names = FALSE)
+} else {
+  cat("\n Warning: No posterior overlap\n")
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+################### Section 4 creation of summary results
+
+# Load necessary libraries
+library(tidyverse)
+
+# ------------------ File Paths ------------------ #
+overlap_csv <- "Posterior_Overlap_V4.csv"
+comparison_csv <- "Significant_Differences_V4.csv"
+final_summary_csv <- "SppTrait_Analysis_FinalSummary_SigDifferences_V4.csv"
+
+# ------------------ Load Data ------------------ #
+overlap_df <- read.csv(overlap_csv)
+comparison_df <- read.csv(comparison_csv)
+
+# ------------------ Part 1: Extract Strong Differences from Overlap & Merge with Comparison Data ------------------ #
+overlap_sig <- overlap_df %>%
+  filter(Strong_Difference == 1) %>%
+  left_join(comparison_df, by = c("Grouping_Variable", "Category1", "Category2", "Covariate"))
+
+# ------------------ Part 2: Extract Significant Differences from Comparison & Merge with Overlap Data ------------------ #
+comparison_sig <- comparison_df %>%
+  filter(Outside_Community_Mean == TRUE | Outside_75_CI_Community == TRUE) %>%
+  left_join(overlap_df, by = c("Grouping_Variable", "Category1", "Category2", "Covariate"))
+
+# ------------------ Part 3: Combine Results and Remove Duplicates ------------------ #
+final_summary <- bind_rows(overlap_sig, comparison_sig) %>%
+  distinct()
+
+# ------------------ Export Final Summary ------------------ #
+write.csv(final_summary, final_summary_csv, row.names = FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+################# section 5 creating the combined forest and ridge plot outputs
+
+# Load necessary libraries
+library(tidyverse)
+library(ggridges)
+library(ggpubr)  # For multi-page PDF export
+
+# ------------------ File Paths ------------------ #
+forest_ridge_plot_pdf <- "Combined_Forest_Ridge_Plots_V4.pdf"
+
+# Initialize list for storing plots
+combined_plot_list <- list()
+
+# ------------------ Create Combined Forest & Ridge Plots ------------------ #
+for (group_var in grouping_vars) {
+  cat("\nProcessing Combined Plots for:", group_var, "\n")
+
+  # Prepare data for ridge plot (density)
+  ridge_data <- merged_df %>%
+    filter(!is.na(!!sym(group_var)))
+
+  # Prepare data for forest plot (credible intervals)
+  forest_data <- merged_df %>%
+    group_by(!!sym(group_var), Covariate) %>%
+    summarise(
+      mean_estimate = mean(Posterior_Estimate, na.rm = TRUE),
+      ci_75_lower = quantile(Posterior_Estimate, 0.125, na.rm = TRUE),
+      ci_75_upper = quantile(Posterior_Estimate, 0.875, na.rm = TRUE),
+      ci_95_lower = quantile(Posterior_Estimate, 0.025, na.rm = TRUE),
+      ci_95_upper = quantile(Posterior_Estimate, 0.975, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  # Merge with community mean for dashed line
+  forest_data <- left_join(forest_data, community_means, by = "Covariate") %>%
+    rename(Community_Mean_Cov = Community_Mean)
+
+  # Create the combined plot
+  combined_plot <- ggplot() +
+
+    # Ridge Plot (Density)
+    geom_density_ridges(
+      data = ridge_data,
+      aes(x = Posterior_Estimate, y = as.factor(!!sym(group_var)), fill = !!sym(group_var)),
+      color = "#333333", alpha = 0.5, scale = 0.7, rel_min_height = 0.005
+    ) +
+
+    # Forest Plot (95% & 75% Credible Intervals)
+    geom_errorbarh(
+      data = forest_data,
+      aes(xmin = ci_95_lower, xmax = ci_95_upper, y = as.factor(!!sym(group_var))),
+      color = "gray30", alpha = 0.4, height = 0, linewidth = 2, position = position_nudge(y = -0.1)
+    ) +
+    geom_errorbarh(
+      data = forest_data,
+      aes(xmin = ci_75_lower, xmax = ci_75_upper, y = as.factor(!!sym(group_var))),
+      color = "gray50", height = 0, linewidth = 2, position = position_nudge(y = -0.1)
+    ) +
+
+    # Mean Points
+    geom_point(
+      data = forest_data,
+      aes(x = mean_estimate, y = as.factor(!!sym(group_var))),
+      shape = 21, color = "black", fill = "white", size = 2.5, stroke = 1.1, position = position_nudge(y = -0.1)
+    ) +
+
+    # Community Mean Dashed Line
+    geom_vline(
+      aes(xintercept = Community_Mean_Cov),
+      linetype = "dashed", color = "black", size = 1, data = forest_data
+    ) +
+
+    # Facet by Covariate
+    facet_wrap(~ Covariate, scales = "free_x") +
+
+    # Theme and Labels
+    theme_minimal() +
+    labs(
+      x = "Posterior Estimate",
+      y = paste(group_var, "Category"),
+      title = paste("Combined Forest & Ridge Plot for", group_var)
+    ) +
+    theme(legend.position = "none")
+
+  # Store plot for PDF export
+  combined_plot_list[[group_var]] <- combined_plot
+}
+
+# ------------------ Export Combined Plots to PDF ------------------ #
+if (length(combined_plot_list) > 0) {
+  pdf(forest_ridge_plot_pdf, width = 10, height = 8)
+  for (plot in combined_plot_list) if (!is.null(plot)) print(plot)
+  dev.off()
+} else {
+  cat("\n Warning: No combined plots were generated.\n")
+}
+
+
+
+
